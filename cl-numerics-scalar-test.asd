@@ -8,8 +8,8 @@
 (in-package :cl-numerics-scalar-test-asd)
 
 (defsystem cl-numerics-scalar-test
-  :author ""
-  :license ""
+  :author "Alexey Cherkaev"
+  :license "GPL3"
   :depends-on (:cl-numerics-scalar
                :prove)
   :components ((:module "t"
