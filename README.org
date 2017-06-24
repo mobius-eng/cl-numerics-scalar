@@ -1,0 +1,129 @@
+* CL-NUMERICS-SCALAR 
+
+Common Lisp library for numerical computations: scalar functions.
+
+** Installation
+
+Requirement: Quicklisp
+
+Supported implementations: SBCL and CCL. Complex functions may not
+work correctly on ECL and CLISP due to their treatment of complex
+type.
+
+Clone the repository into =quicklisp/local-projects= directory. Start
+the lisp and then load with Quicklisp:
+
+#+BEGIN_SRC lisp
+(ql:quickload :cl-numerics-scalar)
+(use-package 'cl-numerics-scalar)
+#+END_SRC
+
+To run the tests:
+
+#+BEGIN_SRC lisp
+(asdf:test-system :cl-numerics-scalar)
+#+END_SRC
+
+** Documentation
+
+*** Constants
+
+**** Controlling precision
+
+Numerical computations are almost never exact. To control the
+precision, comparison is often performed within absolute and relative
+tolerances (see further ~NUM=~). The following two constants help to
+define the default precisions. Both of them are defined as =(SQRT
+EPSILON)= for their respective types:
+
+- =+DOUBLE-FLOAT-DEFAULT-PRECISION+= :: Default precision for
+     double-float computations. 
+- =+SINGLE-FLOAT-DEFAULT-PRECISION+= :: Default precision for
+     single-float computations.
+
+**** Standard maths constants
+
+CL provides constant =PI=, yet it is only =DOUBLE-FLOAT=, which makes
+it incovenient to conduct optimized single-float precision
+computations. The following constants are defined specific for the
+type:
+
+- =+DOUBLE-float-pi+= :: Double-float number \pi (equal to =PI=).
+- =+SINGLE-FLOAT-PI+= :: Single-float number \pi.
+- =+DOUBLE-FLOAT-E+= :: Double-float Euler constant /e/ =
+     2.718281828...
+- =+SINGLE-FLOAT-E+= :: Single-float Euler constant /e/.
+- =+DOUBLE-FLOAT-I+= :: Double-float imaginary one.
+- =+SINGLE-FLOAT-I+= :: Single-float imaginary one.
+
+*** Comparison
+
+- ~(NUM= X Y &OPTIONAL ABS-TOLERANCE REL-TOLERANCE)~ :: generic
+     comparison of two numbers =X= and =Y=  within the precision
+     defined by =ABS-TOLERANCE= and =REL-TOLERANCE=. Numbers =X= and
+     =Y= are considered equal if =|X - Y| < A + R * F=, where =A= and
+     =R= are absolute and relative tolerances respectively and =F= is
+     max of absolute values of =X= and =Y=. Both =X= and =Y= must have
+     the same type for this function to work correctly. Tolerances
+     default to =+XXX-DEFAULT-PRECISION+= constant values where =XXX=
+     is either =DOUBLE-FLOAT= or =SINGLE-FLOAT=. Works correctly with
+     complex numbers. Precision for complex numbers is chosen based on
+     the type of real and imaginary parts (SBCL & CCL) or defaults to
+     =DOUBLE-FLOAT= (ECL and CLISP, work in progress, may change).
+- ~(XXX-NUM= X Y &OPTIONAL (ABS-TOLERANCE +YYY-DEFAULT-PRECISION+)
+  (REL-TOLERANCE +YYY-DEFAULT-PRECISION+))~ :: Type-specialized
+  versions of ~NUM=~ where =XXX= is one of =DOUBLE-FLOAT=,
+  =SINGLE-FLOAT=, =COMPLEX-DOUBLE-FLOAT=, =COMPLEX-SINGLE-FLOAT= and
+  =YYY= is either =DOUBLE-FLOAT= or =SINGLE-FLOAT=. Specialized
+  versions exist to avoid dispatch penalty associated with the generic
+  ~NUM=~.
+
+*** Scalar algebraic equations
+
+The following functions provide the solution to non-linear scalar
+algebraic equations:
+
+- =(CONVERGE FUNCTION INIT-VALUE &OPTIONAL MAX-ITERATIONS
+  ABS-TOLERANCE REL-TOLERANCE)= :: Generic function solving =x = f(x)=
+  equation starting from initial guess =INIT-VALUE= by iteratively
+  applying =f(x)= (contraction mapping). Does so no more than
+  =MAX-ITERATIONS= (defaults to =*CONVERGE-MAX-ITERATIONS*= defined as
+  100). Convergence is achieved when previous and current
+  approximations become equal in the sense of ~NUM=~ (hence, the
+  presence of tolerances). Tolerances default to type-specific
+  tolerances depending on the type of =INIT-VALUE=. =FUNCTION= must
+  produce the same type as its input. =(CONVERGE-XXX ...)= is the same
+  as generic =CONVERGE=, but type specific with =XXX= being on the
+  following: =DOUBLE-FLOAT=, =SINGLE-FLOAT=, =COMPLEX-DOUBLE-FLOAT=,
+  =COMPLEX-SINGLE-FLOAT=.
+- =(BISECTION FUNCTION LEFT RIGHT &OPTIONAL ABS-TOLERANCE
+  REL-TOLERANCE)= :: Generic function solving *real-value* equation
+  =f(x) = 0= on the interval =(LEFT RIGHT)= using bisection
+  technique. Produces the answer within specified absolute and
+  relative tolerances. =BISECTION-XXX= are type-specific variants with
+  =XXX= being =DOUBLE-FLOAT= and =SINGLE-FLOAT=. *This is a preferred
+  way to solve scalar algebraic equations*.
+- =(FALSE-POSITION FUNCTION LEFT RIGHT &OPTIONAL ABS-TOLERANCE
+  REL-TOLERANCE)= :: Generic function solving *real-value* equation
+  =f(x) = 0= on the interval =(LEFT RIGHT)= by approximating it with
+  the straight line (approximation of the Newton's method). Produces
+  the answer within specified absolute and relative
+  tolerances. Implements optimization for the cases when the root is
+  very close to one of the boundaries. =FALSE-POSTION-XXX= are type
+  specific variants with =XXX = DOUBLE-FLOAT= and
+  =SINGLE-FLOAT=. *From author's experience, this method is more
+  expensive compared to =BISECTION= in most cases, use it only if
+  bisection was found to be slower.*
+
+** Future plans
+
+The following is planned to be imlemented:
+- Special functions: Bessel, Gamma, etc. (port from =CLMATH= with
+  added type-specific optimization).
+- Root finding algorithm for complex numbers (?)
+
+** LICENSE
+
+GPL3
+
+(C) Alexey Cherkaev
