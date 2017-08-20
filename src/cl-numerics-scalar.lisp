@@ -1,26 +1,37 @@
 (in-package :cl-user)
 
+;; * CL-NUMERICS-SCALAR
+;; ** Package defintion and declarations
 (defpackage cl-numerics-scalar
   (:use :cl)
   (:export
-   +double-float-default-precision+
-   +double-float-e+
-   +double-float-pi+
-   +single-float-default-precision+
-   +single-float-e+
-   +single-float-pi+
-   +single-float-i+
-   +double-float-i+
-   num=
-   converge
-   *converge-max-iterations*
-   bisection
-   false-position))
+   #:+double-float-default-precision+
+   #:+double-float-e+
+   #:+double-float-pi+
+   #:+single-float-default-precision+
+   #:+single-float-e+
+   #:+single-float-pi+
+   #:+single-float-i+
+   #:+double-float-i+
+   #:plus-infinite-p
+   #:minus-infinite-p
+   #:+double-float-plus-infinity+
+   #:+double-float-minus-infinity+
+   #:+single-float-plus-infinity+
+   #:+single-float-negative-infinity+
+   #:num=
+   #:converge
+   #:*converge-max-iterations*
+   #:bisection
+   #:false-position))
 
 (in-package :cl-numerics-scalar)
 
 (declaim (optimize (speed 3) (debug 1) (safety 1)))
 
+
+;; ** Floating point constants
+;; *** Default precision
 (defconstant +double-float-default-precision+
   #.(sqrt double-float-epsilon)
   "Constant that should be considered as a default precision for
@@ -31,32 +42,92 @@
   "Constant that should be considered as a default precision for
    SINGLE-FLOAT computations: (SQRT EPSILON)")
 
+;; *** Euler constant e = 2.718281828...
 (defconstant +single-float-e+ #.(exp 1.0)
   "SINGLE-FLOAT Euler constant e = 2.71828...")
 
 (defconstant +double-float-e+ #.(exp 1d0)
   "DOUBLE-FLOAT Euler constant e = 2.71828...")
 
+;; *** Pi = 3.14...
 (defconstant +double-float-pi+ #.(coerce pi 'double-float)
   "DOUBLE-FLOAT pi number")
 
 (defconstant +single-float-pi+ #.(coerce pi 'single-float)
   "SINGLE-FLOAT pi number")
 
+;; *** Imaginary one i
 (defconstant +single-float-i+ #C(0.0 1.0)
   "SINGLE-FLOAT imaginary one")
 
 (defconstant +double-float-i+ #C(0d0 1d0)
   "DOUBLE-FLOAT imaginary one")
 
-(declaim (inline type-head))
-(defun type-head (type-spec)
-  "Take the main type identifier"
-  (declare (optimize (speed 3) (debug 1) (safety 1)))
-  (if (consp type-spec)
-      (car type-spec)
-      type-spec))
+;; *** Infinties
+;; Infinities are not so useful in CL as division by zero
+;; usually produces an error. However, they are useful to
+;; indicate, e.g. infinite boundary of integration
+;; (see CL-NUMERICS QUAD.LISP)
+(defgeneric plus-infinite-p (number))
+(defgeneric minus-infinite-p (number))
 
+(defmethod plus-infinite-p ((number number)) nil)
+(defmethod minus-infinite-p ((number number)) nil)
+
+#-clisp
+(defmethod plus-infinite-p ((number number))
+  (> number most-positive-double-float))
+
+#-clisp
+(defmethod minus-infinite-p ((number double-float))
+  (< number most-negative-double-float))
+
+#-clisp
+(defmethod plus-infinite-p ((number single-float))
+  (> number most-positive-single-float))
+
+#-clisp
+(defmethod minus-infinite-p ((number single-float))
+  (< number most-negative-single-float))
+
+#-clisp
+(defconstant +double-float-plus-infinity+
+  #+sbcl sb-ext:double-float-positive-infinity
+  #+ccl 1d++0
+  #+ecl ext:double-float-positive-infinity)
+
+#-clisp
+(defconstant +double-float-minus-infinity+
+  #+sbcl sb-ext:double-float-negative-infinity
+  #+ccl -1d++0
+  #+ecl ext:double-float-negative-infinity)
+
+#-clisp
+(defconstant +single-float-plus-infinity+
+  #+sbcl sb-ext:single-float-positive-infinity
+  #+ccl 1e++0
+  #+ecl ext:single-float-positive-infinity)
+
+#-clisp
+(defconstant +single-float-negative-infinity+
+  #+sbcl sb-ext:single-float-negative-infinity
+  #+ccl -1e++0
+  #+ecl ext:single-float-negative-infinity)
+
+
+;; ** Utils on CL types: extract parts and flatten
+;; *** TYPE-HEAD
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (declaim (inline type-head))
+  (defun type-head (type-spec)
+    "Take the main type identifier"
+    (declare (optimize (speed 3) (debug 1) (safety 1)))
+    (if (consp type-spec)
+        (car type-spec)
+        type-spec)))
+
+;; *** DECOMPOSE-TYPE, SIMPLIFY-TYPE-NAME, MAKE-DEFAULT-TOLERANCE
+;; These functions are used in macros, thus inside =EVAL-WHEN= form.
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun decompose-type (type-spec)
     "Decomposes type to its two basic components.
@@ -79,7 +150,8 @@
            (intern (format nil "+~A-DEFAULT-PRECISION+" subtype)))
        (if (null subtype) main-type subtype)))))
 
-
+;; ** Approximate comparison NUM=
+;; *** NUM= - main function
 (defun num= (x y &optional (abs-tolerance nil atol-p) (rel-tolerance nil rtol-p))
   "Test equality between X and Y within the tolerance given by
   ABS-TOLERANCE and REL-TOLERANCE.
@@ -94,12 +166,14 @@
                      ,@(if rtol-p (list rel-tolerance) nil))))
       (apply #'num=-dispatch arglist))))
 
+;; *** ~NUM=-dispatch~: dispatching on type
 (defgeneric num=-dispatch (type subtype x y &optional atol rtol)
   (:documentation
    "Dispatch function for NUM=.
    TYPE is the main type id of argument X
    SUBTYPE is either NIL or element type for COMPLEX"))
 
+;; *** MAKE-NUM= : macro making NUM= for different types
 (defmacro make-num= (type)
   "Makes types-specialized NUM="
   (let* ((simplified-type-name (simplify-type-name type))
@@ -125,11 +199,14 @@
              (,function-name x y atol rtol))
            (export ',function-name))))))
 
+;; *** Generate NUM= for different types
 (make-num= double-float)
 (make-num= single-float)
 (make-num= (complex double-float))
 (make-num= (complex single-float))
 
+;; ** CONVERGE: solves x=f(x)
+;; *** CONVERGE-DISPATCH
 (defgeneric converge-dispatch (type subtype function init-value
                                &optional
                                  max-iterations
@@ -137,8 +214,10 @@
                                  rel-tolerance)
   (:documentation "Simple iteration algorithm solving x=f(x)"))
 
+;; *** *CONVERGE-MAX-ITERATIONS*
 (defvar *converge-max-iterations* 100)
 
+;; *** CONVERGE
 (defun converge (function init-value
                  &optional
                    (max-iterations *converge-max-iterations*)
@@ -153,6 +232,7 @@
                      ,@(if rtol-p (list rel-tolerance) nil))))
       (apply #'converge-dispatch arglist))))
 
+;; *** MAKE-CONVERGE: macro generating CONVERGE-*
 (defmacro make-converge (type)
   (let* ((simplified-type-name (simplify-type-name type))
          (function-name (intern (format nil "CONVERGE-~A" simplified-type-name)))
@@ -187,15 +267,19 @@
              (,function-name function init-value max-iterations abs-tolerance rel-tolerance))
            (export ',function-name))))))
 
+;; *** Generate CONVERGE for different types
 (make-converge double-float)
 (make-converge single-float)
 (make-converge (complex double-float))
 (make-converge (complex single-float))
 
+;; ** BISECTION: solve f(x)=0
+;; *** Generic BISECTION
 (defgeneric bisection (function left right &optional abs-tolerance rel-tolerance)
   (:documentation "Bisection method of solving f(x)=0 on interval (left right).
   Only works on reals"))
 
+;; *** MAKE-BISECTION: macro generating BISECTION
 (defmacro make-bisection (type)
   (let* ((simplified-type-name (simplify-type-name type))
          (function-name (intern (format nil "BISECTION-~A" simplified-type-name)))
@@ -227,14 +311,17 @@
          (,function-name function left right abs-tolerance rel-tolerance))
        (export ',function-name))))
 
+;; *** Generate BISECTION for different types
 (make-bisection double-float)
 (make-bisection single-float)
 
-
+;; ** FALSE-POSITION
+;; *** Generic FALSE-POSITION
 (defgeneric false-position (function left right
                             &optional abs-tolerance rel-tolerance)
   (:documentation "False position solver f(x)=0 on the interval (left right)"))
 
+;; *** MAKE-FALSE-POSITION: macro
 (defmacro make-false-position (type)
   (let* ((simplified-type-name (simplify-type-name type))
          (function-name (intern (format nil "FALSE-POSITION-~A" simplified-type-name)))
@@ -276,6 +363,7 @@
          (,function-name function left right abs-tolerance rel-tolerance))
        (export ',function-name))))
 
+;; *** Generate FALSE-POSITION for differnt types
 (make-false-position double-float)
 (make-false-position single-float)
 
@@ -299,3 +387,4 @@
 ;;        do (setf result (+ (aref polynomial i) (* number result)))
 ;;        finally (return result))))
 
+;; * END
